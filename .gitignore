@@ -8,3 +8,12 @@ target/
 *.log
 target-app/
 target-stockroom/
+# Python packaging
+*.egg-info/
+dist/
+build/
+
+# Python testing
+.pytest_cache/
+.coverage
+htmlcov/
