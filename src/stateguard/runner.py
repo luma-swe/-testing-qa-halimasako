@@ -14,6 +14,7 @@ class TestResult:
     actual_status: int | None
     passed: bool
     response_body: str
+    expected_body: str | None = None
 
 
 def run_test(
@@ -23,6 +24,7 @@ def run_test(
     path: str,
     expected_status: int,
     json_body: dict | None = None,
+    expected_body: str | None = None,
 ) -> TestResult:
     """Send an HTTP request and compare its status with the expected status."""
 
@@ -56,6 +58,8 @@ def run_test(
         response_body = str(error.reason)
 
     passed = actual_status == expected_status
+    if expected_body is not None:
+        passed = passed and expected_body in response_body
 
     return TestResult(
         name=name,
@@ -63,4 +67,5 @@ def run_test(
         actual_status=actual_status,
         passed=passed,
         response_body=response_body,
+        expected_body=expected_body,
     )
