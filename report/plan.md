@@ -1,243 +1,261 @@
-# StateGuard: Automated Testing and Defect Detection for Existing Software
+# StateGuard — Project Proposal
 
 ## 1. Project Title and Category
 
-**Project Title:** StateGuard: Automated Testing and Defect Detection for Existing Software
+**Project title:** StateGuard: An Automated State and Transaction Consistency Testing Tool
 
-**Project Category:** Software Testing Tool / Automated Testing / Defect Detection
+**Project category:** Software Testing and Quality Assurance
+
+StateGuard is a Python-based testing tool designed to detect functional defects, invalid state transitions and data consistency problems in applications that maintain changing records over time.
+
+The project will use an inventory management application as its target, focusing particularly on stock operations and transaction history.
 
 ## 2. Problem Statement and Motivation
 
-Software applications may contain functional defects, input validation errors, incorrect state transitions, data inconsistencies and security-related vulnerabilities. These issues can cause unexpected behaviour, incorrect results or potentially unsafe operations.
+Traditional software testing often focuses on whether individual operations produce the expected responses. However, an application can return successful responses while maintaining incorrect internal data.
 
-Although existing testing frameworks allow developers to write and execute tests, identifying different types of defects and systematically evaluating their detection can require considerable manual effort.
+This is particularly important in inventory management systems. A stock operation affects several related pieces of information: the product's current quantity, the transaction record and the historical quantity snapshots associated with that transaction.
 
-This project aims to develop StateGuard, an automated testing tool that evaluates an existing software application using predefined test scenarios and deliberately injected defects.
+For example, when a product has 10 units and a user records a stock-out of 4 units, the expected result is 6 units. The transaction history should also record a change of -4, a previous quantity of 10 and a resulting quantity of 6.
 
-Instead of developing a new application to test, the project will use an existing open-source application as its testing target. Twelve controlled defects will be introduced into the target application. StateGuard will execute corresponding test cases, compare actual behaviour with expected results, identify failures and generate a testing report.
+A defect could cause the application to update the product quantity incorrectly, record an incorrect transaction, or modify historical information. Individual API response checks may not detect all these problems.
 
-The purpose is to evaluate how effectively the tool detects the injected defects and reports the resulting inconsistencies.
+StateGuard aims to address this issue through automated testing, controlled defect injection and an independent transaction-replay oracle.
 
 ## 3. What Will Be Built
 
-The project will consist of two separate components:
+### A. Existing Open-Source Software Under Test
 
-**A. Existing software under test**
+StateGuard will test **Stockroom**, an open-source inventory management application.
 
-An existing open-source application will be selected as the testing target. The application will be studied to understand its main features, normal behaviour and expected results.
+- **Repository:** https://github.com/preransai/stockroom
+- **Licence:** MIT
+- **Pinned version:** `71253fceea005dd0dc8130136cc76cf4f0d92d60`
+- **Technologies:** Flask, Python, SQLite and SQLAlchemy.
 
-Twelve controlled defects will be introduced into its code. These may include functional errors, input validation problems, incorrect data handling, boundary-condition errors and security-related issues, depending on the capabilities of the selected application.
+Stockroom provides product management, stock movements, inventory adjustments, stock alerts and reporting.
 
-**B. StateGuard testing tool**
+Its `StockMovement` model maintains a transaction ledger containing information such as movement type, signed quantity change, previous quantity (`qty_before`) and resulting quantity (`qty_after`).
 
-StateGuard will be developed in Python. It will execute automated tests against the target application and evaluate whether its behaviour matches the expected results.
+The application will be kept at the specified Git commit to ensure a reproducible testing baseline. Controlled defects will be introduced on a separate working branch without modifying the pinned baseline.
 
-The tool will perform the following tasks:
+StateGuard will interact with Stockroom through its HTTP interface and inspect its SQLite database in read-only mode when verifying internal state.
 
-1. **Test execution:** Execute predefined test cases against the target application.
-2. **Input validation testing:** Submit valid, invalid, empty and boundary-value inputs.
-3. **Functional testing:** Verify that the application's main operations produce the expected results.
-4. **State and data consistency testing:** Check whether application data remains correct after sequences of operations.
-5. **Error detection:** Identify unexpected behaviour, incorrect outputs and failed assertions.
-6. **Defect detection:** Determine whether the injected defects are detected by the corresponding test cases.
-7. **Test reporting:** Generate a report containing executed tests, passed and failed tests, detected defects and undetected defects.
-8. **Detection evaluation:** Calculate the proportion of injected defects successfully detected by the tool.
+### B. StateGuard Testing Tool
 
-### Planned Injected Defects
+StateGuard will be developed in Python and will include:
 
-The project will include twelve deliberately introduced defects. Their exact implementation will depend on the selected application's architecture and available features.
+1. **HTTP Test Runner:** Sends requests to the target application and records responses, expected results and actual results.
+2. **Test Cases:** Executes functional, input validation, state transition and data consistency tests.
+3. **Transaction Log:** Maintains an independent record of the operations submitted by StateGuard.
+4. **Transaction-Replay Oracle:** Recalculates expected inventory quantities independently and compares them against the application's recorded state.
+5. **Snapshot Integrity Checks:** Detects changes to historical transaction snapshots after subsequent operations.
+6. **Test Reporting:** Displays test names, expected results, actual results and PASS/FAIL outcomes.
 
-The initial distribution will be:
+### C. Independent Transaction-Replay Oracle
 
-| No. | Defect to inject | Expected behaviour |
-|---|---|---|
-| 1 | Empty input accepted | Required fields should reject empty values |
-| 2 | Invalid input accepted | Invalid data should be rejected |
-| 3 | Incorrect input boundary handling | Boundary values should be handled correctly |
-| 4 | Incorrect creation operation | New records should be created accurately |
-| 5 | Incorrect update operation | Updates should preserve data integrity |
-| 6 | Incorrect deletion operation | Deleted records should no longer be accessible |
-| 7 | Incorrect status transition | Only permitted state transitions should occur |
-| 8 | Duplicate records permitted | Duplicate operations should follow defined rules |
-| 9 | Incorrect search or filtering | Search results should match the requested criteria |
-| 10 | Incorrect sorting or calculation | Results should follow the expected ordering or calculation |
-| 11 | Incorrect error handling | Invalid operations should return appropriate errors |
-| 12 | Security-related defect, where supported | The application should reject an unauthorized or unsafe operation |
+The transaction-replay oracle will be one of StateGuard's central features.
 
-These defects will be introduced individually or in controlled combinations so that their effects can be evaluated and reproduced.
+It will establish a known initial stock quantity and maintain its own expected transaction history based on the operations submitted by the testing tool.
 
-### Technologies and Tools
+For each operation, it will independently calculate the expected signed quantity change and resulting inventory balance.
 
-- Python: implementation of StateGuard.
-- Pytest: automated test execution and assertions.
-- Hypothesis (if appropriate): generation of additional test inputs and edge cases.
-- Git: version control.
-- An existing open-source application: target software.
-- The target application's existing technology stack: required to understand and introduce the defects.
+For example, starting with 10 units:
+
+| Operation | Expected balance |
+|---|---:|
+| Initial quantity | 10 |
+| Stock-in: 15 | 25 |
+| Stock-out: 4 | 21 |
+| Return: 1 | 22 |
+| Adjustment: -2 | 20 |
+
+StateGuard will then compare its independently calculated results with:
+
+- The recorded movement type and quantity change.
+- The movement's `qty_before` and `qty_after` snapshots.
+- The final quantity stored in the product record.
+- Previously recorded snapshots, to ensure they remain unchanged after later transactions.
+
+The oracle will derive expected changes from the original operations submitted by StateGuard, rather than trusting the application's recorded transaction values.
+
+### D. Planned Defects
+
+A total of **12 controlled defects** will be introduced into the target application, one at a time where appropriate, to evaluate StateGuard's detection capabilities.
+
+The planned defect categories include:
+
+1. Empty or missing input accepted.
+2. Invalid quantity accepted.
+3. Incorrect input boundary handling.
+4. Incorrect stock-in calculation.
+5. Incorrect stock-out calculation.
+6. Incorrect return or adjustment behaviour.
+7. Negative inventory permitted.
+8. Incorrect `qty_before` snapshot.
+9. Incorrect `qty_after` snapshot.
+10. Product quantity and transaction ledger become inconsistent.
+11. Failed transactions do not roll back all related changes.
+12. Security or authorization validation bypassed, where supported by the target functionality.
+
+Each defect will be documented with its intended behaviour, injected fault, corresponding test and detection result.
+
+### E. Technologies
+
+- Python
+- pytest
+- Flask
+- SQLite
+- SQLAlchemy
+- Git and GitHub
+- HTTP requests and JSON
+- Terminal-based test reporting
 
 ## 4. Success Metrics
 
-The project will be evaluated using the following criteria:
+StateGuard will be evaluated using the following criteria:
 
-- All twelve planned defects are successfully introduced and documented.
-- Each injected defect has at least one corresponding test scenario.
-- StateGuard can execute the test suite against the selected application.
-- The tool correctly identifies whether individual test cases pass or fail.
-- The tool produces a report of detected and undetected defects.
-- The final evaluation measures the percentage of injected defects detected.
+- Successfully executes automated tests against the target application.
+- Detects the 12 deliberately injected defects.
+- Correctly identifies invalid input and boundary violations.
+- Detects inconsistencies between submitted transactions, historical snapshots and current product quantities.
+- Detects modifications to previously recorded transaction snapshots.
+- Verifies that failed operations do not leave inconsistent partial updates.
+- Produces understandable PASS/FAIL results with expected and actual outcomes.
+- Can execute the test suite repeatedly against the pinned application version.
 
-The defect detection rate will be calculated as:
-
-Detection Rate = (Number of detected injected defects / 12) × 100
-
-The tool should also provide repeatable results when the same tests are executed under the same conditions.
+The main evaluation metric will be whether StateGuard can detect the deliberately injected defects and report the associated failures accurately.
 
 ## 5. Originality and Related Work
 
-StateGuard builds upon established software testing practices and frameworks, including automated testing, test case design, assertion-based verification and defect detection.
+Existing automated testing frameworks such as pytest provide mechanisms for executing tests and checking expected results. Inventory applications may also include their own validation and consistency tests.
 
-Existing tools such as pytest provide the infrastructure for executing tests, while property-based testing frameworks such as Hypothesis can generate a wider range of inputs.
+Stockroom, for example, already contains tests that verify whether its demo transaction history forms an unbroken ledger.
 
-The project focuses on combining these practices into a testing workflow that evaluates an existing application against a controlled set of twelve deliberately injected defects.
+StateGuard builds on these ideas by introducing a separate testing tool that maintains its own expected transaction history and independently replays submitted operations.
 
-The main objective is not to replace existing testing frameworks but to develop a structured tool that executes tests, evaluates their outcomes and measures defect detection effectiveness.
+Its focus is not limited to checking whether the application's own records are internally consistent. It also checks whether those records agree with the original operations submitted to the application.
 
-## 6. Course Concepts and Use of AI Tools
+The combination of independent transaction replay, historical snapshot integrity checks and controlled defect injection will form the project's main contribution.
 
-The project will apply several software testing and quality assurance concepts:
+## 6. Course Concepts and AI Tools
 
-- Equivalence Partitioning
-- Boundary Value Analysis
-- Functional Testing
-- Black-box and White-box Testing
-- Test Case Design
-- Test Oracles and Assertions
-- State Transition Testing
-- Negative Testing
-- Regression Testing
-- Defect Injection
-- Test Reporting and Evaluation
+The project will apply concepts from the Software Testing and Quality Assurance course, including:
 
-AI tools may be used to assist with understanding unfamiliar code, reviewing test scenarios, debugging and documenting the project. All generated code and test results will be reviewed and verified by the student.
+- Functional testing.
+- Input validation and boundary value analysis.
+- Equivalence partitioning.
+- State transition testing.
+- Assertions and test oracles.
+- Data consistency and integrity testing.
+- Regression testing.
+- Negative testing and error handling.
+- Defect injection and detection.
 
-## 7. Implementation Plan and Weekly Checkpoints
+AI tools may be used as development and learning assistance for understanding existing code, debugging, generating test ideas and reviewing implementation choices. All generated suggestions and test results will be reviewed and verified.
 
-The project will be developed over five consecutive weeks. Each checkpoint will deliver an incremental, working version of the project.
+## 7. Five-Week Checkpoint Plan
 
-Every checkpoint must contain:
+### Checkpoint 1 — Target Integration and Initial Prototype
 
-- Updated source code in `src/`.
-- At least one automated test in `tests/`.
-- A checkpoint report in `report/checkpoints/`.
+**Objective:** Establish the testing environment and connect StateGuard to the selected application.
 
-The overall plan will be maintained in `report/plan.md`.
-
-### Checkpoint 1 – Project Setup and Initial Prototype (Week 9)
-
-**Objectives:**
-- Select and study an existing open-source application.
-- Understand its main features and expected behaviour.
-- Set up the StateGuard project structure.
-- Implement an initial testing prototype.
-- Introduce the first controlled defect.
-
-**Injected defects:** 1 defect.
-
-**Tests:**
-- Create at least one automated test for the selected application.
-- Verify the expected behaviour of a normal operation.
-- Test the behaviour affected by the first injected defect.
+Tasks:
+- Pin and document the Stockroom version.
+- Set up the target application and its testing database.
+- Adapt the StateGuard HTTP runner to interact with Stockroom.
+- Implement the initial test execution and PASS/FAIL reporting.
+- Establish authentication for test requests.
+- Identify the product and stock movement data needed by StateGuard.
+- Introduce and detect the first controlled defect.
 
 **Deliverables:**
-- Initial working prototype in `src/`.
-- At least one automated test in `tests/`.
-- `report/checkpoints/cp1.md`.
-- Updated `report/plan.md`.
+- Reproducible target application setup.
+- Working HTTP test runner.
+- Initial test cases and execution results.
+- First defect detection demonstration.
 
-### Checkpoint 2 – Test Execution and Input Validation (Week 10)
+**Defects:** 1 introduced and detected (1 cumulative).
 
-**Objectives:**
-- Improve the test execution mechanism.
-- Implement input validation tests.
-- Add support for testing invalid and boundary-value inputs.
-- Introduce additional controlled defects.
+### Checkpoint 2 — Input Validation and Functional Testing
 
-**Injected defects:** 3 additional defects (4 cumulative).
+**Objective:** Expand StateGuard's ability to detect incorrect input handling and basic functional defects.
 
-**Tests:**
-- Valid and invalid input tests.
-- Empty-field tests.
-- Boundary-value tests.
-- Tests verifying the detection of the newly injected defects.
+Tasks:
+- Implement tests for missing, empty and invalid inputs.
+- Apply boundary value analysis to quantity fields.
+- Test valid and invalid stock operations.
+- Verify expected HTTP status codes and response content.
+- Test quantity limits and rejection of invalid stock operations.
+- Introduce controlled input validation and functional defects.
 
 **Deliverables:**
-- Improved working prototype.
-- Additional automated tests.
-- `report/checkpoints/cp2.md`.
+- Expanded test suite.
+- Input validation and boundary tests.
+- Defect detection results.
+- Checkpoint test report.
 
-### Checkpoint 3 – Functional and Data Consistency Testing (Week 11)
+**Defects:** 3 additional defects (4 cumulative).
 
-**Objectives:**
-- Extend StateGuard to test multiple application operations.
-- Verify data consistency after sequences of operations.
-- Test creation, modification and deletion behaviour.
-- Introduce additional defects.
+### Checkpoint 3 — Transaction Replay and Data Consistency
 
-**Injected defects:** 3 additional defects (7 cumulative).
+**Objective:** Implement the independent transaction-replay oracle.
 
-**Tests:**
-- CRUD operation tests.
-- State transition tests.
-- Data consistency tests.
-- Tests for the newly injected defects.
-
-**Deliverables:**
-- Extended testing functionality.
-- Updated automated test suite.
-- `report/checkpoints/cp3.md`.
-
-### Checkpoint 4 – Extended Defect Detection and Reporting (Week 12)
-
-**Objectives:**
-- Add tests for more complex application behaviours.
-- Improve error detection and test result classification.
-- Implement automated test reporting.
-- Introduce additional defects, including a security-related defect if supported by the target application.
-
-**Injected defects:** 3 additional defects (10 cumulative).
-
-**Tests:**
-- Search, filtering or calculation tests, depending on the application.
-- Error-handling tests.
-- Security-related tests where applicable.
-- Tests verifying the newly introduced defects.
+Tasks:
+- Maintain an independent record of submitted stock operations.
+- Establish known initial inventory quantities.
+- Calculate expected stock balances independently.
+- Retrieve and inspect the application's recorded transaction history.
+- Compare expected changes with recorded movement values.
+- Verify `qty_before`, `qty_after` and final product quantities.
+- Test sequences of stock-in, stock-out, returns and adjustments.
+- Introduce defects affecting transaction calculations and consistency.
 
 **Deliverables:**
-- Expanded testing tool.
-- Initial automated test report.
-- Updated test suite.
-- `report/checkpoints/cp4.md`.
+- Working transaction-replay oracle.
+- Automated ledger consistency tests.
+- Multi-operation transaction scenarios.
+- Defect detection results and report.
 
-### Checkpoint 5 – Final Testing and Evaluation (Week 13)
+**Defects:** 3 additional defects (7 cumulative).
 
-**Objectives:**
-- Introduce the final two defects.
-- Complete the twelve-defect testing dataset.
-- Execute the complete test suite.
-- Evaluate StateGuard's defect detection performance.
-- Fix remaining implementation problems and prepare the final documentation.
+### Checkpoint 4 — Historical Snapshot Integrity and State Transitions
 
-**Injected defects:** 2 additional defects (12 cumulative).
+**Objective:** Extend StateGuard to detect defects affecting historical records and related state changes.
 
-**Tests:**
-- Full regression test suite.
-- Tests for all twelve injected defects.
-- Verification of repeatability.
-- Evaluation of detected and undetected defects.
+Tasks:
+- Verify that historical movement snapshots remain unchanged after subsequent operations.
+- Test consecutive stock movements and adjustment sequences.
+- Verify consistency between product records and transaction history.
+- Test failed operations and rollback behaviour.
+- Test relevant authorization and state transition rules.
+- Introduce defects affecting historical snapshots, transaction rollback and state handling.
 
 **Deliverables:**
-- Final working version of StateGuard.
-- Complete automated test suite.
-- Final defect detection report.
-- `report/checkpoints/cp5.md`.
+- Snapshot integrity tests.
+- Extended state transition tests.
+- Rollback and authorization test cases.
+- Defect detection results and report.
 
+**Defects:** 3 additional defects (10 cumulative).
+
+### Checkpoint 5 — Regression Testing and Final Evaluation
+
+**Objective:** Consolidate the tool and evaluate its overall effectiveness.
+
+Tasks:
+- Integrate all test modules into a complete regression suite.
+- Run the complete suite against the target application.
+- Introduce and detect the final controlled defects.
+- Verify that previously detected defects remain detectable.
+- Review test coverage and false-positive results.
+- Improve test reporting and documentation.
+- Document limitations, findings and possible future improvements.
+
+**Deliverables:**
+- Complete StateGuard testing tool.
+- Final automated regression suite.
+- Results for all 12 injected defects.
+- Final project report and demonstration.
+
+**Defects:** 2 additional defects (12 cumulative).
